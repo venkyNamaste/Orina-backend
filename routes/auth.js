@@ -152,6 +152,7 @@ authRouter.put("/update-email", authMiddleware, async (req, res) => {
     console.error(error);
     res.status(500).json({ message: "Failed to update email" });
   }
+  //s
 });
 
 /* ----------------------------- UPDATE PASSWORD ---------------------------- */

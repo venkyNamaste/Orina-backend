@@ -3,52 +3,50 @@ const notesRouter = express.Router();
 const authMiddleware = require("../middleware/authMiddleware");
 const NotesModel = require("../models/Notes");
 
-// Get all notes for the logged-in user
+// Fetch the note for the logged-in user
 notesRouter.get("/", authMiddleware, async (req, res) => {
   try {
-    const notes = await NotesModel.find({ userId: req.user.Rid }).sort({
-      createdAt: -1,
-    });
-    res.status(200).json(notes);
+    const note = await NotesModel.findOne({ userId: req.user.Rid });
+
+    if (note) {
+      res.status(200).json({ text: note.text });
+    } else {
+      res.status(200).json({ text: "" });
+    }
   } catch (error) {
-    res.status(500).json({ error: "Error fetching notes" });
+    res.status(500).json({ error: "Error fetching note" });
   }
 });
 
-// Create or update a note
+// Save or update the note for the logged-in user
 notesRouter.post("/save", authMiddleware, async (req, res) => {
-  const { position, text } = req.body;
+  const { text } = req.body;
 
-  if (!position || !text) {
-    return res.status(400).json({ error: "Position and text are required" });
+  if (typeof text !== "string") {
+    return res.status(400).json({ error: "Text is required and must be a string" });
   }
 
   try {
     const userId = req.user.Rid;
 
-    // Check if a note already exists at the given position for this user
-    const existingNote = await NotesModel.findOne({
-      userId,
-      "position.x": position.x,
-      "position.y": position.y,
-    });
+    let note = await NotesModel.findOne({ userId });
 
-    if (existingNote) {
+    if (note) {
       // Update the existing note
-      existingNote.text = text;
-      await existingNote.save();
-      return res.status(200).json(existingNote);
+      note.text = text;
+      await note.save();
+    } else {
+      // Create a new note
+      note = new NotesModel({
+        userId,
+        text,
+      });
+      await note.save();
     }
 
-    // Create a new note
-    const newNote = new NotesModel({
-      userId,
-      position,
-      text,
-    });
-    await newNote.save();
-    res.status(201).json(newNote);
+    res.status(200).json({ message: "Note saved successfully", note });
   } catch (error) {
+    console.error("Error saving note:", error);
     res.status(500).json({ error: "Error saving note" });
   }
 });

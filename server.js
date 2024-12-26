@@ -9,6 +9,7 @@ const breakRouter = require("./routes/breakRoutes");
 const notesRouter = require("./routes/notes");
 const deepRouter = require("./routes/deep");
 const fileUpload = require("express-fileupload");
+const dailyReportRouter = require("./routes/dailyReportRouter");
 
 // ✅ 1. Load environment variables
 dotenv.config();
@@ -47,6 +48,7 @@ app.use("/tasks", taskRouter);
 app.use("/breaks", breakRouter);
 app.use("/note", notesRouter);
 app.use("/api", deepRouter);
+app.use("/daily-report", dailyReportRouter);
 
 // ✅ 7. Schedule Pending Tasks
 schedulePendingTasks();

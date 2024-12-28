@@ -25,6 +25,7 @@ candidateRouter.get("/", authMiddleware, async (req, res) => {
   
       // Fetch candidates with pagination
       const candidates = await Candidate.find(query)
+      .sort({ createdAt: -1 })
         .skip((page - 1) * limit) // Skip documents for pagination
         .limit(limit); // Limit number of documents
   
@@ -121,31 +122,42 @@ candidateRouter.post('/upload',authMiddleware, async (req, res) => {
 // Route: Add a new candidate
 // POST /api/candidates/save
 candidateRouter.post("/save", authMiddleware, async (req, res) => {
-    const recruiterId = req.user.Rid;
-    const { name, email, contact, position, location, status, notes, jobid , pickupDateTime} = req.body;
-  
-    try {
-      const newCandidate = new Candidate({
-        name,
-        email,
-        contact,
-        position,
-        location,
-        status,
-        notes,
-        recruiterId,
-        jobid,
-        pickupDateTime
+  const recruiterId = req.user.Rid; // Extract recruiter ID from auth middleware
+  const { name, email, contact, position, location, status, notes, jobid, pickupDateTime } = req.body;
+
+  try {
+      // 🔍 Check for duplicate email under the same recruiter
+      const existingCandidate = await Candidate.findOne({ 
+          email, 
+          recruiterId // Ensure the check is scoped to the recruiter's candidates only
       });
-  
+      
+      if (existingCandidate) {
+          return res.status(400).json({ message: "Candidate with this email already exists under your account." });
+      }
+
+      // ✅ Save candidate if no duplicate found for the recruiter
+      const newCandidate = new Candidate({
+          name,
+          email,
+          contact,
+          position,
+          location,
+          status,
+          notes,
+          recruiterId,
+          jobid,
+          pickupDateTime
+      });
+
       await newCandidate.save();
-  
       res.status(201).json({ message: "Candidate added successfully" });
-    } catch (error) {
+  } catch (error) {
       console.error("Error adding candidate:", error);
-      res.status(500).json({ message: "Server error" });
-    }
-  });
+      res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
   
 
 // Route: Update a candidate

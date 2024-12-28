@@ -7,7 +7,7 @@ const Mailjet = require('node-mailjet');
 const authMiddleware = require("../middleware/authMiddleware");
 const Usermodel = require("../models/User");
 
-const sendNotification = async (email, name, candidateName, position, pickupDateTime, reminderType = "creation") => {
+const sendNotification = async (email, name, candidateName, position, contact, pickupDateTime, reminderType = "creation") => {
     console.log("Sending notification");
     console.log("email: ", email);
     console.log("name: ", name);
@@ -50,12 +50,14 @@ const sendNotification = async (email, name, candidateName, position, pickupDate
                                <ul>
                                    <li><b>Candidate Name:</b> ${candidateName}</li>
                                    <li><b>Position:</b> ${position}</li>
+                                    <li><b>Contact:</b> ${contact}</li>
                                </ul>`
                             : `<p>This is a friendly reminder that your task is scheduled for <b>${formattedDate}</b>.</p>
                                <p><b>Candidate Details:</b></p>
                                <ul>
                                    <li><b>Candidate Name:</b> ${candidateName}</li>
                                    <li><b>Position:</b> ${position}</li>
+                                   <li><b>Contact:</b> ${contact}</li>
                                </ul>`
                     }
                     <p>Thank you!</p>
@@ -87,7 +89,15 @@ const scheduleNotifications = async (task, email, name) => {
     reminderTimes.forEach(({ time, type }) => {
         if (time > new Date()) {
             schedule.scheduleJob(time, async () => {
-                sendNotification(email, name, task.pickupDateTime, type);
+                await sendNotification(
+                    email,
+                    name,
+                    task.name,          // Candidate Name
+                    task.position,      // Position
+                    task.contact,       // Contact
+                    task.pickupDateTime,// Pickup DateTime
+                    type                // Reminder Type
+                );
 
                 // Update remindersSent field in the database
                 await Task.findByIdAndUpdate(task._id, {
@@ -97,6 +107,7 @@ const scheduleNotifications = async (task, email, name) => {
         }
     });
 };
+
 
 
 
@@ -218,7 +229,7 @@ taskRouter.post("/save", authMiddleware, async (req, res) => {
         await task.save();
 
         // Send immediate email notification
-        await sendNotification(findUser.email, findUser.name, req.body.name, req.body.position, task.pickupDateTime);
+        await sendNotification(findUser.email, findUser.name, req.body.name, req.body.position, req.body.contact, task.pickupDateTime);
 
         // Schedule reminders
         await scheduleNotifications(task, findUser.email, findUser.name);

@@ -1,5 +1,5 @@
 const express = require("express");
-const bcrypt = require("bcryptjs");
+const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const Usermodel = require("../models/User"); 
 const Mailjet = require('node-mailjet');
@@ -152,7 +152,6 @@ authRouter.put("/update-email", authMiddleware, async (req, res) => {
     console.error(error);
     res.status(500).json({ message: "Failed to update email" });
   }
-  //s
 });
 
 /* ----------------------------- UPDATE PASSWORD ---------------------------- */

@@ -135,7 +135,7 @@ taskRouter.post("/test-mail", (req, res)=>{
                     },
                     To: [
                         {
-                            Email: "sanjuvenky246@gmail.com",
+                            Email: "mallesh@iic.com",
                             Name: "venky"
                         }
                     ],

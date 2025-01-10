@@ -4,15 +4,14 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+    "server": "nodemon server.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "bcryptjs": "^2.4.3",
+    "bcrypt": "^5.1.1",
     "body-parser": "^1.20.3",
     "cors": "^2.8.5",
     "deepinfra": "^2.0.2",
@@ -26,6 +25,7 @@
     "node-schedule": "^2.1.1",
     "nodemailer": "^6.9.16",
     "nodemon": "^3.1.7",
+    "razorpay": "^2.9.5",
     "xlsx": "^0.18.5"
   }
 }

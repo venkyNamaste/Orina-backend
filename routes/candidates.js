@@ -7,117 +7,150 @@ const XLSX = require("xlsx");
 // Get Candidates with Pagination and Search
 // GET /api/candidates
 candidateRouter.get("/", authMiddleware, async (req, res) => {
-    try {
+  try {
       const recruiterId = req.user.Rid; // Extract recruiter ID from auth middleware
 
-  
       // Parse and validate query parameters
-      let { page = 1, limit = 10, position = "", status = "" } = req.query;
+      let { 
+          page = 1, 
+          limit = 10, 
+          position = "", 
+          status = "", 
+          location = "", 
+          contact = "" 
+      } = req.query;
+
       page = Math.max(Number(page), 1); // Ensure page is at least 1
       limit = Math.max(Number(limit), 1); // Ensure limit is at least 1
-  
+
       // Build query object dynamically
       const query = {
-        recruiterId, // Filter by recruiter ID
-        ...(position && { position: { $regex: position, $options: "i" } }), // Case-insensitive regex for position
-        ...(status && { status: { $regex: status, $options: "i" } }), // Case-insensitive regex for status
+          recruiterId, // Filter by recruiter ID
       };
-  
+
+      if (position) {
+          query.position = { $regex: position, $options: "i" }; // Case-insensitive regex for position
+      }
+
+      if (status) {
+        query.status = { $regex: `^${status}$`, $options: "i" }; // Case-insensitive exact match
+    }
+    
+
+      if (location) {
+          query.location = { $regex: location, $options: "i" }; // Case-insensitive regex for location
+      }
+
+      if (contact) {
+          query.contact = { $regex: contact, $options: "i" }; // Case-insensitive regex for contact
+      }
+
       // Fetch candidates with pagination
       const candidates = await Candidate.find(query)
-      .sort({ createdAt: -1 })
-        .skip((page - 1) * limit) // Skip documents for pagination
-        .limit(limit); // Limit number of documents
-  
+          .sort({ createdAt: -1 }) // Sort by newest first
+          .skip((page - 1) * limit) // Skip documents for pagination
+          .limit(limit); // Limit number of documents
+
       // Get total count for pagination
       const total = await Candidate.countDocuments(query);
-  
+
       // Return data to the client
       res.status(200).json({
-        candidates,
-        totalPages: Math.ceil(total / limit),
-        currentPage: page,
+          candidates,
+          totalPages: Math.ceil(total / limit),
+          currentPage: page,
       });
-    } catch (error) {
-      console.error("Error fetching candidates:", error);
-      res.status(500).json({ message: "Error fetching candidates", error: error.message });
-    }
-  });
+  } catch (error) {
+      console.error("❌ Error fetching candidates:", error.message);
+      res.status(500).json({ 
+          message: "Error fetching candidates", 
+          error: error.message 
+      });
+  }
+});
 
-candidateRouter.post('/upload',authMiddleware, async (req, res) => {
-    try {
 
+
+candidateRouter.post('/upload', authMiddleware, async (req, res) => {
+  try {
       console.log("Req.files:", req.files);
+
       // 📝 Validate File Upload
       if (!req.files || !req.files.file) {
-        return res.status(400).json({ success: false, message: "No file uploaded." });
+          return res.status(400).json({ success: false, message: "No file uploaded." });
       }
-  
+
       // 📚 Parse Excel File
       const workbook = XLSX.read(req.files.file.data, { type: "buffer" });
-      const sheetName = workbook.SheetNames[0]; 
+      const sheetName = workbook.SheetNames[0];
       const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
-  
+
       if (jsonData.length === 0) {
-        return res.status(400).json({ success: false, message: "Excel sheet is empty." });
+          return res.status(400).json({ success: false, message: "Excel sheet is empty." });
       }
-  
+
       let savedCount = 0;
       let duplicateCount = 0;
       let errorCount = 0;
-  
-      // 🔄 Process each row individually
-      for (const item of jsonData) {
-        try {
-          // 🛡️ Validate required fields
-          if (!item.Email || !item.Name) {
-            console.warn(`Skipping invalid row: ${JSON.stringify(item)}`);
-            errorCount++;
-            continue;
+
+      // 🛡️ Validate Required Fields and Prepare Data
+      const validCandidates = [];
+      const emailsToCheck = new Set();
+
+      jsonData.forEach((item) => {
+          if (item.Email && item.Name) {
+              emailsToCheck.add(item.Email);
+              validCandidates.push({
+                  name: item.Name,
+                  email: item.Email,
+                  contact: item.Contact || "",
+                  position: item.Position || "",
+                  location: item.Location || "",
+                  status: item.Status || "New",
+                  jobid: item.JobID || item["Job ID"] || item["job id"] || "N/A",
+                  recruiterId: req.user.Rid,
+              });
+          } else {
+              console.warn(`Skipping invalid row: ${JSON.stringify(item)}`);
+              errorCount++;
           }
-  
-          // ⚠️ Check for Duplicate Email
-          const existing = await Candidate.findOne({ email: item.Email });
-          if (existing) {
-            console.warn(`Duplicate entry found: ${item.Email}`);
-            duplicateCount++;
-            continue;
+      });
+
+      // ⚠️ Check for Duplicates in Bulk
+      const existingCandidates = await Candidate.find({ email: { $in: Array.from(emailsToCheck) } }).select('email');
+      const existingEmails = new Set(existingCandidates.map((candidate) => candidate.email));
+
+      // 🗑️ Remove Duplicates from Valid Candidates
+      const uniqueCandidates = validCandidates.filter((candidate) => {
+          if (existingEmails.has(candidate.email)) {
+              duplicateCount++;
+              return false;
           }
-  
-          // ✅ Save Unique Candidate
-          const candidate = new Candidate({
-            name: item.Name,
-            email: item.Email,
-            contact: item.Contact || "",
-            position: item.Position || "",
-            location: item.Location || "",
-            status: item.Status || "New",
-            jobid: item.JobID || "N/A",
-            recruiterId: req.user.Rid,
-          });
-          await candidate.save();
-          savedCount++;
-        } catch (rowError) {
-          console.error(`Error saving row: ${JSON.stringify(item)}`, rowError.message);
-          errorCount++;
-        }
+          return true;
+      });
+
+      // ✅ Bulk Insert Unique Candidates
+      if (uniqueCandidates.length > 0) {
+          await Candidate.insertMany(uniqueCandidates);
+          savedCount = uniqueCandidates.length;
       }
-  
+
       // 📊 Summary Response
       const message = `${savedCount} candidates saved successfully. ${duplicateCount} duplicates skipped. ${errorCount} rows had errors.`;
-  
+
       return res.status(201).json({
-        success: true,
-        message,
+          success: true,
+          message,
       });
-    } catch (error) {
+  } catch (error) {
       console.error("❌ Error processing file:", error.message);
       return res.status(500).json({
-        success: false,
-        message: "Failed to process file.",
+          success: false,
+          message: "Failed to process file.",
       });
-    }
-  });
+  }
+});
+
 
 // Route: Add a new candidate
 // POST /api/candidates/save

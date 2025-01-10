@@ -83,6 +83,7 @@ breakRouter.get("/filter", authMiddleware, async (req, res) => {
 // Update a break (end time and duration)
 // Stop Break and Update Duration
 // Stop Break and Update Duration
+// Stop Break and Update Duration
 breakRouter.patch("/", authMiddleware, async (req, res) => {
   const { end_time } = req.body;
 
@@ -96,11 +97,6 @@ breakRouter.patch("/", authMiddleware, async (req, res) => {
       return res.status(404).json({ error: "No ongoing break found." });
     }
 
-    // Validate end_time and start_time
-    if (!end_time || isNaN(Date.parse(end_time))) {
-      return res.status(400).json({ error: "Invalid end time." });
-    }
-
     const endTime = new Date(end_time);
     const startTime = new Date(ongoingBreak.start_time);
 
@@ -108,31 +104,36 @@ breakRouter.patch("/", authMiddleware, async (req, res) => {
       return res.status(400).json({ error: "Invalid start or end time." });
     }
 
-    // Calculate session duration and updated remaining time
+    // Calculate session duration
     const sessionDuration = (endTime - startTime) / 1000; // Duration in seconds
     if (sessionDuration < 0) {
       return res.status(400).json({ error: "End time cannot be before start time." });
     }
 
+    // Adjust remaining time and exceeded time
     const updatedRemainingTime = Math.max(ongoingBreak.remaining_time - sessionDuration, 0);
-    const exceededTime = updatedRemainingTime === 0 ? sessionDuration - ongoingBreak.remaining_time : 0;
+    const exceededTime = sessionDuration > ongoingBreak.remaining_time
+      ? sessionDuration - ongoingBreak.remaining_time
+      : 0;
 
-    // Update the ongoing break with end_time, duration, and exceeded_time
+    // Update the ongoing break
     ongoingBreak.end_time = endTime;
-    ongoingBreak.duration = (ongoingBreak.duration || 0) + sessionDuration; // Ensure duration is not undefined
+    ongoingBreak.duration = (ongoingBreak.duration || 0) + sessionDuration;
     ongoingBreak.remaining_time = updatedRemainingTime;
     ongoingBreak.exceeded_time = (ongoingBreak.exceeded_time || 0) + exceededTime;
 
     await ongoingBreak.save();
 
-    res.status(200).json({ message: "Break stopped successfully", ongoingBreak });
+    res.status(200).json({
+      message: "Break stopped successfully",
+      remaining_time: updatedRemainingTime,
+      exceeded_time: exceededTime,
+    });
   } catch (error) {
     console.error("Error stopping break:", error);
     res.status(500).json({ error: "Error stopping break" });
   }
 });
-
-
 
 
 module.exports = breakRouter;
